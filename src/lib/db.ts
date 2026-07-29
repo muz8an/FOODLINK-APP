@@ -88,7 +88,7 @@ export const db = {
     try {
       // Try to fetch existing
       const { data, error } = await supabase.from('profiles').select('*').eq('id', user.id).single()
-      if (data) return data as UserProfile
+      if (data) return { ...data, role: data.role?.toString().toLowerCase() as Role } as UserProfile
 
       // If not found (and not a real error), create it
       if (error && error.code !== 'PGRST116') {
@@ -100,7 +100,7 @@ export const db = {
         id: user.id,
         email: user.email || '',
         full_name: defaults.full_name || user.user_metadata?.full_name || 'FoodLink Member',
-        role: defaults.role || user.user_metadata?.role || 'donor',
+        role: (defaults.role || user.user_metadata?.role || 'donor').toString().toLowerCase(),
         phone: defaults.phone || '',
         verified: defaults.verified ?? false,
         points: defaults.points ?? 0,
@@ -120,7 +120,7 @@ export const db = {
         console.warn(`ensureProfile insert failed (${classified.kind}):`, classified.message)
         return profile as UserProfile
       }
-      return newProfile as UserProfile
+      return { ...newProfile, role: newProfile.role?.toString().toLowerCase() as Role } as UserProfile
     } catch (err) {
       console.error('ensureProfile error:', err)
       return null
@@ -135,7 +135,10 @@ export const db = {
       console.warn(`getAllUsers (${c.kind}):`, c.message)
       return []
     }
-    return (data || []) as UserProfile[]
+    return (data || []).map(u => ({
+      ...u,
+      role: u.role?.toString().toLowerCase() as Role
+    })) as UserProfile[]
   },
 
   async getProfile(id: string): Promise<UserProfile | null> {
@@ -144,7 +147,7 @@ export const db = {
     if (error && error.code !== 'PGRST116') {
       console.warn('getProfile error:', error.message)
     }
-    return data as UserProfile | null
+    return data ? { ...data, role: data.role?.toString().toLowerCase() as Role } as UserProfile : null
   },
 
   async incrementPoints(userId: string, pts: number): Promise<boolean> {
@@ -495,15 +498,6 @@ export const authDb = {
   async signOut(): Promise<void> {
     if (!isSupabaseConfigured()) return
     await supabase.auth.signOut()
-  },
-
-  async signInWithGoogle(): Promise<{ error?: string }> {
-    if (!isSupabaseConfigured()) return { error: 'Supabase not configured' }
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: window.location.origin }
-    })
-    return { error: error?.message }
   },
 
   async signUpWithEmail(email: string, password: string, metadata: any): Promise<{ user?: any; error?: string }> {

@@ -85,6 +85,7 @@ interface State {
   emergencies: EmergencyReq[]
   messages: ChatMessage[]
   notifications: Notif[]
+  pickupAlerts: string[] // donation IDs that have been accepted and need volunteer claim
   setCurrentUser: (u:UserProfile|null)=>void
   addUser: (u:UserProfile)=>void
   addDonation: (d:Donation)=>void
@@ -94,6 +95,9 @@ interface State {
   pushNotif: (n:Notif)=>void
   markNotifRead: (id:string)=>void
   awardPoints: (userId:string, pts:number)=>void
+  addPickupAlert: (donationId:string)=>void
+  removePickupAlert: (donationId:string)=>void
+  clearPickupAlerts: ()=>void
 }
 
 export const useStore = create<State>((set, _get)=>({
@@ -103,19 +107,30 @@ export const useStore = create<State>((set, _get)=>({
   emergencies: [],
   messages: [],
   notifications: [],
+  pickupAlerts: [],
   setCurrentUser: (u)=> set({currentUser: u}),
   addUser: (u)=> set(s=> ({users: [...s.users, u]})),
   addDonation: (d)=> set(s=> ({donations: [d, ...s.donations]})),
   updateDonation: (id,patch)=> set(s=> ({donations: s.donations.map(x=>x.id===id? {...x, ...patch}:x)})),
   addEmergency: (e)=> set(s=> ({emergencies: [e, ...s.emergencies]})),
-  addMessage: (m)=> set(s=> ({ messages: [...s.messages, m] })),
+  addMessage: (m)=> set(s=> ({
+    messages: s.messages.some(x => x.id === m.id) ? s.messages : [...s.messages, m]
+  })),
   pushNotif: (n)=> set(s=> ({ notifications: [n, ...s.notifications] })),
   markNotifRead: (id)=> set(s=> ({notifications: s.notifications.map(n=>n.id===id? {...n, read:true}:n)})),
   awardPoints: (userId, pts)=> set(s=>{
     const users = s.users.map(u=> u.id===userId ? {...u, points:u.points+pts, rank: calcRank(u.points+pts)}:u)
     const currentUser = s.currentUser?.id===userId ? users.find(u=>u.id===userId)||s.currentUser : s.currentUser
     return { users, currentUser }
-  })
+  }),
+  addPickupAlert: (donationId)=> set(s=> {
+    if (s.pickupAlerts.includes(donationId)) return s
+    return { pickupAlerts: [...s.pickupAlerts, donationId] }
+  }),
+  removePickupAlert: (donationId)=> set(s=> ({
+    pickupAlerts: s.pickupAlerts.filter(id => id !== donationId)
+  })),
+  clearPickupAlerts: ()=> set({ pickupAlerts: [] })
 }))
 
 export function calcRank(points:number){

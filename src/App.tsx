@@ -5,9 +5,10 @@ import {
   Leaf, HeartHandshake, Sprout, MapPin, ShieldCheck, Users2, Truck, BarChart3, MessageCircle, Bell, Search,
   Moon, Sun, LogOut, Star, Trophy, BadgeCheck,
   UtensilsCrossed, CheckCircle2, Menu, X, Send, Camera,
-  Languages, Siren, Activity, Share2, Award, ScanLine
+  Languages, Siren, Activity, Share2, Award, ScanLine,
+  Navigation2, Clock, AlertTriangle
 } from 'lucide-react'
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import L from 'leaflet'
 import { QRCodeCanvas } from 'qrcode.react'
@@ -163,7 +164,18 @@ export default function App() {
           chatDb.list(),
           db.getAllUsers()
         ])
-        useStore.setState({ donations, emergencies, notifications: notifs, messages, users })
+        const normalizedUsers = users && users.length > 0
+          ? users
+          : currentUser
+            ? [currentUser]
+            : []
+        const mergedUsers = currentUser
+          ? normalizedUsers.some(u => u.id === currentUser.id)
+            ? normalizedUsers
+            : [currentUser, ...normalizedUsers]
+          : normalizedUsers
+
+        useStore.setState({ donations, emergencies, notifications: notifs, messages, users: mergedUsers })
       } catch (err) {
         console.warn('Fetch data error:', err)
       }
@@ -178,12 +190,41 @@ export default function App() {
   }, [currentUser])
 
   return (
-    <div className={`${dark ? 'dark' : ''}`}>
-      <div className={`min-h-screen font-[Inter] transition-colors duration-500 ${dark ? 'bg-[#0d1117] text-[#e9f2ec]' : 'bg-[#f7faf7] text-[#0f1d16]'}`}>
+    <div className={`app-container ${dark ? 'dark' : ''}`}>
+      <div className={`app-shell font-[Inter] transition-colors duration-500 ${dark ? 'bg-[#0d1117] text-[#e9f2ec]' : 'bg-[#f7faf7] text-[#0f1d16]'}`}>
         <style>{`
           @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&display=swap');
           html, body { font-family: 'Inter', system-ui, sans-serif; }
           .display { font-family: 'Fraunces', serif; }
+          .app-container {
+            min-height: 100vh;
+            width: 100vw;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+          }
+          .app-shell {
+            width: 100vw;
+            height: 100vh;
+            overflow: auto;
+          }
+          @media (orientation: landscape) {
+            .app-shell {
+              aspect-ratio: 16 / 9;
+              width: 100vw;
+              height: auto;
+              max-height: 100vh;
+            }
+          }
+          @media (orientation: portrait) {
+            .app-shell {
+              aspect-ratio: 9 / 16;
+              height: 100vh;
+              width: auto;
+              max-width: 100vw;
+            }
+          }
           .glass-noise:before {
             content:''; position:absolute; inset:0; background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns=N/A%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
             opacity:.022; pointer-events:none; border-radius:inherit;
@@ -302,7 +343,7 @@ export default function App() {
             <div>
               <div className="font-[700] mb-3">Contact</div>
               <div className={`${dark?'text-zinc-400':'text-zinc-600'}`}>
-                support@foodlink.in<br/>+91 80 4921 7788<br/><br/>Made with ♻️ for zero-hunger 2030
+                support@foodlink.in<br/>+91 63 6480 8720<br/><br/>Made with ♻️ for zero-hunger 2030
               </div>
             </div>
           </div>
@@ -563,24 +604,6 @@ function AuthModal({ dark, tr, onClose }:{ dark:boolean, tr:any, onClose:()=>voi
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
 
-  const handleGoogleLogin = async () => {
-    setBusy(true)
-    try {
-      const { error } = await authDb.signInWithGoogle()
-      if (error) {
-        toast.error(error)
-      } else {
-        toast.info('Redirecting to Google...')
-        // Do not close modal - user will be redirected back
-        setBusy(false)
-        return
-      }
-    } catch (err: any) {
-      toast.error(err.message || 'Google sign-in failed')
-    }
-    setBusy(false)
-  }
-
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!email || !pass) {
@@ -661,7 +684,7 @@ function AuthModal({ dark, tr, onClose }:{ dark:boolean, tr:any, onClose:()=>voi
           <div className="display text-[34px] font-[700] leading-tight">FoodLink Control<br/>Center</div>
           <div className="mt-3 text-[14.7px] text-emerald-50/95">Supabase Auth • RLS • Realtime • Google Maps</div>
           <div className="mt-8 space-y-3 text-[13.6px]">
-            {['Email + Google OAuth','Role RBAC (Donor/NGO/Volunteer/Admin)','Live chat • QR • Badges • Leaderboard','End-to-end cold-chain proof'].map(b=>(
+            {['Email authentication','Role RBAC (Donor/NGO/Volunteer/Admin)','Live chat • QR • Badges • Leaderboard','End-to-end cold-chain proof'].map(b=>(
               <div key={b} className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4"/>{b}</div>
             ))}
           </div>
@@ -701,7 +724,6 @@ function AuthModal({ dark, tr, onClose }:{ dark:boolean, tr:any, onClose:()=>voi
             <button disabled={busy} className="w-full h-[52px] rounded-[16px] font-[720] text-white bg-gradient-to-r from-emerald-600 to-emerald-500 disabled:opacity-60">
               {busy ? 'Authenticating…' : (mode==='login' ? 'Sign in securely' : 'Create account')}
             </button>
-            <button type="button" onClick={handleGoogleLogin} disabled={busy} className={`w-full h-[48px] rounded-[16px] font-[600] text-[14px] ${glass(dark)} disabled:opacity-60`}>Continue with Google</button>
             <div className="text-[13px] text-center opacity-80">
               {mode==='login' ? "No account? " : "Already have an account? "}
               <button type="button" onClick={()=>setMode(mode==='login' ? 'register':'login')} className="text-emerald-600 font-[700]">{mode==='login' ? 'Register' : 'Login'}</button>
@@ -1027,6 +1049,34 @@ function DonorShareForm({ dark, tr }:{ dark:boolean, tr:any }) {
             <input value={loc.addr} onChange={e=>setLoc({...loc, addr:e.target.value})} className={inputCls(dark)+' flex-1'} />
             <button type="button" onClick={pickLocation} className={`px-3 rounded-[14px] text-[12.5px] font-[640] ${glass(dark)}`}>Use GPS</button>
           </div>
+          <div className={`mt-4 rounded-[20px] overflow-hidden border ${dark ? 'border-white/12' : 'border-black/[0.08]'}`}>
+            <MapContainer center={[loc.lat, loc.lng]} zoom={14} style={{ height:'240px', width:'100%' }} scrollWheelZoom={false} attributionControl={false}>
+              <TileLayer
+                url={dark
+                  ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+                  : 'https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png'}
+              />
+              <Marker
+                position={[loc.lat, loc.lng]}
+                draggable
+                eventHandlers={{
+                  dragend: (e:any) => {
+                    const latlng = e.target.getLatLng()
+                    setLoc(prev => ({
+                      ...prev,
+                      lat: latlng.lat,
+                      lng: latlng.lng,
+                      addr: `GPS ${latlng.lat.toFixed(4)}, ${latlng.lng.toFixed(4)}`
+                    }))
+                  }
+                }}
+              >
+                <Popup>Pickup location</Popup>
+              </Marker>
+              <MapClickHandler setLoc={setLoc} />
+            </MapContainer>
+            <div className="p-3 text-[12px] opacity-75">Click the map or drag the marker to update pickup location.</div>
+          </div>
         </Field>
         <Field label={tr('notes')} dark={dark} full><textarea name="notes" rows={3} placeholder="Allergens, spice level, packaging…" className={inputCls(dark)} /></Field>
 
@@ -1072,6 +1122,20 @@ function Field({label, children, dark, full}:{label:string, children:React.React
     <div className={`text-[12.5px] font-[630] mb-[7px] ${dark?'text-zinc-300':'text-zinc-700'}`}>{label}</div>
     {children}
   </div>
+}
+
+function MapClickHandler({ setLoc }: { setLoc: React.Dispatch<React.SetStateAction<{ lat:number, lng:number, addr:string }>> }) {
+  useMapEvents({
+    click(e) {
+      setLoc(prev => ({
+        ...prev,
+        lat: e.latlng.lat,
+        lng: e.latlng.lng,
+        addr: `GPS ${e.latlng.lat.toFixed(4)}, ${e.latlng.lng.toFixed(4)}`
+      }))
+    }
+  })
+  return null
 }
 
 function DonationList({ dark, list, canCancel=false }:{ dark:boolean, list:Donation[], canCancel?:boolean }) {
@@ -1125,46 +1189,68 @@ function statusTint(status:string, dark:boolean){
 
 // NGO VIEWS
 function NGOViews({ active, dark, tr }:{ active:string, dark:boolean, tr:any }) {
-  const { donations, currentUser, users } = useStore()
+  const { donations, currentUser, users, updateDonation } = useStore()
   const nearby = donations.filter(d => d.status === 'pending')
   const accepted = donations.filter(d => d.accepted_by === currentUser?.id)
 
   const handleAccept = async (d: Donation) => {
     try {
       const pts = calcPoints(d)
-      const ok = await donationsDb.update(d.id, {
-        status: 'accepted',
+      const volunteers = users.filter(u => u.role?.toLowerCase() === 'volunteer')
+      const patch: Partial<Donation> = {
         accepted_by: currentUser!.id,
-        points_awarded: pts
-      })
+        points_awarded: pts,
+        status: 'accepted',
+        volunteer_id: null
+      }
+
+      const ok = await donationsDb.update(d.id, patch)
       if (!ok) throw new Error('Update failed')
 
+      updateDonation(d.id, patch)
       await db.incrementPoints(d.donor_id, pts)
+
+      // Notify the donor
       await notifsDb.send({
         user_id: d.donor_id,
         title: 'Donation accepted',
         body: `${currentUser?.organization_name || currentUser?.full_name} accepted ${d.food_name}`,
         type: 'donation'
       })
-      toast.success('Donation accepted • QR generated')
+
+      // Notify ALL volunteers with full from→to details
+      if (volunteers.length > 0) {
+        await Promise.all(volunteers.map(v => notifsDb.send({
+          user_id: v.id,
+          title: '🚀 Pickup Available – Claim Now!',
+          body: `📍 FROM: ${d.pickup_address}\n📍 TO: ${currentUser?.organization_name || currentUser?.full_name}\n🍽️ ${d.food_name} (${d.servings} servings)\n⏰ Expires: ${new Date(d.expiry_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`,
+          type: 'pickup_available'
+        })))
+        toast.success('Donation accepted • ALL volunteers notified of available pickup')
+      } else {
+        toast.success('Donation accepted • QR generated')
+      }
     } catch (err: any) {
-      toast.error(err.message)
+      console.error('Accept donation failed:', err)
+      toast.error(err.message || 'Unable to accept donation')
     }
   }
 
   const handleAssign = async (d: Donation) => {
-    const vol = users.find(u => u.role === 'volunteer')
+    const vol = users.find(u => u.role?.toLowerCase() === 'volunteer')
     if (!vol) {
       toast.error('No volunteers available right now')
       return
     }
     try {
       const ok = await donationsDb.update(d.id, {
+        accepted_by: d.accepted_by || currentUser!.id,
         status: 'volunteer_assigned',
         volunteer_id: vol.id
       })
       if (!ok) throw new Error('Update failed')
 
+      updateDonation(d.id, { accepted_by: d.accepted_by || currentUser!.id, status: 'volunteer_assigned', volunteer_id: vol.id })
       await notifsDb.send({
         user_id: vol.id,
         title: 'New pickup assigned',
@@ -1173,7 +1259,8 @@ function NGOViews({ active, dark, tr }:{ active:string, dark:boolean, tr:any }) 
       })
       toast.success('Volunteer assigned!')
     } catch (err: any) {
-      toast.error(err.message)
+      console.error('Assign volunteer failed:', err)
+      toast.error(err.message || 'Unable to assign volunteer')
     }
   }
 
@@ -1310,10 +1397,219 @@ function EmergencyConsole({ dark, tr }:{ dark:boolean, tr:any }) {
   )
 }
 
+// ============================================================
+// PICKUP ALERT MODAL – pops up for volunteers when NGO accepts
+// ============================================================
+function PickupAlertModal({ dark, donation, onClaim, onDismiss }:{ dark:boolean, donation: Donation, onClaim:()=>void, onDismiss:()=>void }) {
+  const { users } = useStore()
+  const ngo = users.find(u => u.id === donation.accepted_by)
+  const ngoName = ngo?.organization_name || ngo?.full_name || 'NGO'
+  
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[90] flex items-center justify-center p-4"
+    >
+      <div className="absolute inset-0 bg-black/55 backdrop-blur-[6px]" onClick={onDismiss} />
+      <motion.div
+        initial={{ y: 20, scale: 0.96, opacity: 0 }}
+        animate={{ y: 0, scale: 1, opacity: 1 }}
+        exit={{ y: 12, opacity: 0 }}
+        transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+        className={`relative w-full max-w-[560px] rounded-[28px] overflow-hidden ${glass(dark)} glass-noise`}
+      >
+        {/* Top gradient bar */}
+        <div className="h-2 bg-gradient-to-r from-emerald-500 via-emerald-400 to-orange-400" />
+
+        <div className="p-[24px]">
+          <div className="flex items-start justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-[52px] h-[52px] rounded-[18px] bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center shadow-lg">
+                <Navigation2 className="w-[26px] h-[26px] text-white" />
+              </div>
+              <div>
+                <div className="text-[20px] font-[750] display leading-tight">Pickup Available!</div>
+                <div className={`text-[12.5px] ${dark?'text-emerald-300':'text-emerald-700'} font-[650]`}>A new order needs a rider</div>
+              </div>
+            </div>
+            <button onClick={onDismiss} className={`w-9 h-9 rounded-[12px] flex items-center justify-center ${dark?'bg-white/[0.07]':'bg-black/[0.05]'} hover:bg-red-500/15`}>
+              <X className="w-[16px] h-[16px]" />
+            </button>
+          </div>
+
+          {/* Food card */}
+          <div className={`rounded-[20px] p-[18px] ${dark?'bg-white/[0.05]':'bg-emerald-50/70'} border ${dark?'border-white/[0.08]':'border-emerald-100'}`}>
+            <div className="flex gap-4">
+              <img
+                src={donation.images?.[0] || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=400&auto=format&fit=crop'}
+                className="w-[110px] h-[110px] rounded-[16px] object-cover shadow-sm"
+                alt={donation.food_name}
+              />
+              <div className="flex-1 min-w-0">
+                <div className="text-[19px] font-[720] tracking-tight">{donation.food_name}</div>
+                <div className={`text-[13.5px] mt-1 flex items-center gap-2 ${dark?'text-zinc-300':'text-zinc-600'}`}>
+                  <span className="font-[650]">{donation.servings} meals</span>
+                  <span className="w-1 h-1 rounded-full bg-current opacity-40" />
+                  <span>{donation.quantity_kg} kg</span>
+                  <span className="w-1 h-1 rounded-full bg-current opacity-40" />
+                  <span className="capitalize">{donation.veg_type}</span>
+                </div>
+                <div className={`mt-2 flex items-center gap-1.5 text-[12.5px] ${dark?'text-amber-300':'text-amber-700'}`}>
+                  <Clock className="w-4 h-4" />
+                  Expires {new Date(donation.expiry_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* FROM → TO route */}
+          <div className="mt-5 grid grid-cols-[1fr_auto_1fr] gap-4 items-center">
+            <div className={`rounded-[16px] p-[14px] ${dark?'bg-white/[0.04]':'bg-black/[0.03]'}`}>
+              <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider opacity-60 font-[700] mb-1">
+                <MapPin className="w-3.5 h-3.5 text-emerald-500" />
+                PICKUP FROM
+              </div>
+              <div className="text-[14px] font-[650] leading-tight">{donation.pickup_address}</div>
+              <div className="text-[12px] opacity-70 mt-1">Donor: {donation.donor_name}</div>
+            </div>
+
+            <div className="flex flex-col items-center">
+              <div className="w-[38px] h-[38px] rounded-full bg-emerald-600 flex items-center justify-center shadow-md shadow-emerald-600/30">
+                <Truck className="w-[18px] h-[18px] text-white" />
+              </div>
+              <div className={`w-[2px] h-[24px] ${dark?'bg-white/15':'bg-black/10'}`} />
+              <div className={`text-[10px] font-[700] ${dark?'text-emerald-300':'text-emerald-700'}`}>
+                {donation.accepted_by ? haversine(
+                  donation.lat, donation.lng,
+                  users.find(u => u.id === donation.accepted_by)?.lat || 12.9716,
+                  users.find(u => u.id === donation.accepted_by)?.lng || 77.5946
+                ).toFixed(1) : '?'} km
+              </div>
+            </div>
+
+            <div className={`rounded-[16px] p-[14px] ${dark?'bg-white/[0.04]':'bg-black/[0.03]'}`}>
+              <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider opacity-60 font-[700] mb-1">
+                <MapPin className="w-3.5 h-3.5 text-orange-500" />
+                DELIVER TO
+              </div>
+              <div className="text-[14px] font-[650] leading-tight">{ngoName}</div>
+              <div className="text-[12px] opacity-70 mt-1">NGO accepting the food</div>
+            </div>
+          </div>
+
+          {/* Priority + Contact */}
+          <div className="mt-3 flex gap-2">
+            <div className={`flex-1 rounded-[14px] px-[14px] py-[10px] text-[12.5px] ${dark?'bg-amber-400/10 text-amber-300':'bg-amber-50 text-amber-800'}`}>
+              <AlertTriangle className="w-4 h-4 inline mr-1" />
+              Priority pickup – food expires soon
+            </div>
+          </div>
+
+          {/* Action buttons */}
+          <div className="mt-5 flex gap-3">
+            <button
+              onClick={onClaim}
+              className="flex-1 h-[52px] rounded-[16px] bg-gradient-to-r from-emerald-600 to-emerald-500 text-white font-[720] text-[15px] shadow-lg shadow-emerald-600/25 hover:brightness-105 transition"
+            >
+              🚀 Claim This Assignment
+            </button>
+            <button
+              onClick={onDismiss}
+              className={`px-[20px] h-[52px] rounded-[16px] text-[14px] font-[620] ${glass(dark)}`}
+            >
+              Later
+            </button>
+          </div>
+
+          <div className={`mt-3 text-[11.5px] text-center ${dark?'text-zinc-400':'text-zinc-500'}`}>
+            Claiming will assign this pickup to you. You'll see QR code & routing details.
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  )
+}
+
 // VOLUNTEER
 function VolunteerViews({ active, dark, tr: _tr }:{ active:string, dark:boolean, tr:any }) {
-  const { donations, currentUser } = useStore()
-  const assigned = donations.filter(d => d.volunteer_id === currentUser?.id)
+  const { donations, currentUser, updateDonation, users, pickupAlerts, addPickupAlert, removePickupAlert, clearPickupAlerts } = useStore()
+  const [activePickupAlert, setActivePickupAlert] = useState<Donation | null>(null)
+
+  // Show available pickups (status=accepted with no volunteer) AND claimed ones
+  const availablePickups = donations.filter(d =>
+    currentUser?.role?.toLowerCase() === 'volunteer' &&
+    d.status === 'accepted' &&
+    !d.volunteer_id
+  )
+  const claimedPickups = donations.filter(d =>
+    d.volunteer_id === currentUser?.id &&
+    ['volunteer_assigned', 'picked_up', 'delivered'].includes(d.status)
+  )
+
+  // Monitor pickupAlerts state to show modal
+  useEffect(() => {
+    if (pickupAlerts.length > 0 && currentUser?.role === 'volunteer') {
+      const latestAlertId = pickupAlerts[pickupAlerts.length - 1]
+      const donation = donations.find(d => d.id === latestAlertId)
+      if (donation && donation.status === 'accepted' && !donation.volunteer_id) {
+        setActivePickupAlert(donation)
+      }
+    }
+  }, [pickupAlerts, donations, currentUser])
+
+  // Listen for real-time donation updates to trigger alerts
+  const alertedIdsRef = useRef(new Set<string>())
+  useEffect(() => {
+    if (!currentUser || currentUser.role !== 'volunteer') return
+
+    const channel = supabase
+      .channel('volunteer-pickup-alerts')
+      .on('postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'donations', filter: `status=eq.accepted` },
+        (payload) => {
+          const updated = payload.new as Donation
+          // Only alert if no volunteer assigned yet and not already alerted
+          if (!updated.volunteer_id && !alertedIdsRef.current.has(updated.id)) {
+            alertedIdsRef.current.add(updated.id)
+            addPickupAlert(updated.id)
+            // Play notification sound / toast
+            toast.success(`🚀 New pickup: ${updated.food_name}`, {
+              description: `From ${updated.pickup_address}`
+            })
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      channel.unsubscribe()
+    }
+  }, [currentUser, addPickupAlert])
+
+  const getDeliveryDestination = (d: Donation) => {
+    const ngo = users.find(u => u.id === d.accepted_by)
+    return ngo ? ngo.organization_name || ngo.full_name : 'NGO Hub'
+  }
+
+  const handleClaimAssignment = async (id: string) => {
+    if (!currentUser) return
+    try {
+      const ok = await donationsDb.update(id, {
+        status: 'volunteer_assigned',
+        volunteer_id: currentUser.id
+      })
+      if (!ok) throw new Error('Assignment claim failed')
+      updateDonation(id, { status: 'volunteer_assigned', volunteer_id: currentUser.id })
+      removePickupAlert(id)
+      setActivePickupAlert(null)
+      toast.success('✅ Assignment claimed! You can now view QR code & route.')
+    } catch (err: any) {
+      console.error('Claim assignment failed:', err)
+      toast.error(err.message || 'Unable to claim assignment')
+    }
+  }
 
   const handleUpdateStatus = async (id: string, status: DonationStatus, points = 0) => {
     try {
@@ -1336,68 +1632,395 @@ function VolunteerViews({ active, dark, tr: _tr }:{ active:string, dark:boolean,
     }
   }
 
-  if (active === 'map') return <GlassCard dark={dark} className="p-3 h-[560px]"><MapWithDonations dark={dark} donations={assigned} /></GlassCard>
+  if (active === 'map') return <GlassCard dark={dark} className="p-3 h-[560px]"><MapWithDonations dark={dark} donations={[...availablePickups, ...claimedPickups]} /></GlassCard>
   if (active === 'completed') return <DonationList dark={dark} list={donations.filter(d => d.status === 'completed' && d.volunteer_id === currentUser?.id)} />
   if (active === 'chat') return <ChatPanel dark={dark} />
 
+  // Show available section even when no items
   return (
     <div className="space-y-4">
-      {assigned.map(d => (
-        <GlassCard key={d.id} dark={dark} className="p-[18px]">
-          <div className="flex flex-col md:flex-row gap-4">
-            <img src={d.images?.[0] || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=600&auto=format&fit=crop'} className="w-full md:w-[180px] h-[128px] object-cover rounded-[16px]" alt="" />
-            <div className="flex-1">
-              <div className="text-[17px] font-[720]">{d.food_name}</div>
-              <div className="text-[13px] opacity-80 mt-1">{d.pickup_address} → NGO Hub</div>
-              <div className="text-[12.5px] opacity-75 mt-1">3.2 km • Cold chain active</div>
-              <div className="flex flex-wrap gap-2 mt-3">
-                {d.status === 'volunteer_assigned' && (
-                  <button onClick={() => handleUpdateStatus(d.id, 'picked_up')} className="px-3 py-[9px] rounded-[12px] bg-emerald-600 text-white text-[13px] font-[640] flex items-center gap-1.5"><ScanLine className="w-4 h-4" /> QR Pickup</button>
-                )}
-                {d.status === 'picked_up' && (
-                  <button onClick={() => handleUpdateStatus(d.id, 'delivered')} className={`px-3 py-[9px] rounded-[12px] text-[13px] ${glass(dark)} flex items-center gap-1.5`}><Camera className="w-4 h-4" /> Upload Proof</button>
-                )}
-                {d.status === 'delivered' && (
-                  <button onClick={() => handleUpdateStatus(d.id, 'completed', 18)} className={`px-3 py-[9px] rounded-[12px] text-[13px] ${glass(dark)}`}>Mark Completed</button>
-                )}
+      {/* Pickup Alert Modal */}
+      <AnimatePresence>
+        {activePickupAlert && (
+          <PickupAlertModal
+            dark={dark}
+            donation={activePickupAlert}
+            onClaim={() => handleClaimAssignment(activePickupAlert.id)}
+            onDismiss={() => {
+              removePickupAlert(activePickupAlert.id)
+              setActivePickupAlert(null)
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* New Pickups Available Banner */}
+      {availablePickups.length > 0 && (
+        <GlassCard dark={dark} className={`p-[16px] border-l-4 border-l-emerald-500 ${dark ? 'bg-emerald-500/8' : 'bg-emerald-50/80'}`}>
+          <div className="flex items-center gap-3">
+            <Navigation2 className="w-6 h-6 text-emerald-500 animate-pulse" />
+            <div>
+              <div className="font-[700] text-[15px]">{availablePickups.length} New Available Pickup{availablePickups.length > 1 ? 's' : ''}</div>
+              <div className={`text-[12.5px] ${dark?'text-zinc-300':'text-zinc-600'}`}>
+                These donations have been accepted by NGOs and need a volunteer to deliver
               </div>
-            </div>
-            <div className="w-full md:w-[170px] flex flex-col items-center">
-              <div className={`p-[10px] rounded-[16px] ${dark ? 'bg-white' : 'bg-white'} shadow-sm`}>
-                <QRCodeCanvas value={`foodlink://pickup/${d.id}`} size={124} />
-              </div>
-              <div className="text-[11px] opacity-70 mt-2">Scan to verify pickup</div>
             </div>
           </div>
         </GlassCard>
-      ))}
-      {assigned.length === 0 && <GlassCard dark={dark} className="p-8 text-center">No assignments yet.</GlassCard>}
+      )}
+
+      {/* Available Pickups Section */}
+      {availablePickups.length > 0 && (
+        <>
+          <div className="flex items-center gap-2">
+            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-[14px] font-[700]">Available Pickups</span>
+            <span className={`text-[12px] px-2.5 py-[3px] rounded-full ${dark?'bg-emerald-400/10 text-emerald-300':'bg-emerald-100 text-emerald-700'}`}>
+              {availablePickups.length} open
+            </span>
+          </div>
+
+          {availablePickups.map(d => {
+            const ngo = users.find(u => u.id === d.accepted_by)
+            const ngoName = ngo?.organization_name || ngo?.full_name || 'NGO'
+            const dist = d.accepted_by && ngo
+              ? haversine(d.lat, d.lng, ngo.lat || 12.9716, ngo.lng || 77.5946).toFixed(1)
+              : '?'
+
+            return (
+              <GlassCard key={d.id} dark={dark} className="p-[18px] overflow-hidden">
+                <div className="flex flex-col md:flex-row gap-4">
+                  <img src={d.images?.[0] || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=600&auto=format&fit=crop'} className="w-full md:w-[140px] h-[120px] object-cover rounded-[14px]" alt="" />
+                  <div className="flex-1">
+                    <div className="text-[17px] font-[720] flex items-center gap-2">
+                      {d.food_name}
+                      <span className={`text-[10px] px-2 py-[2px] rounded-full bg-orange-500/12 text-orange-600 dark:text-orange-300 font-[650]`}>
+                        {d.veg_type}
+                      </span>
+                    </div>
+
+                    {/* FROM → TO Route Display */}
+                    <div className="mt-2 space-y-1.5">
+                      <div className="flex items-start gap-2 text-[13px]">
+                        <div className="w-6 h-6 rounded-full bg-emerald-500/15 flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <MapPin className="w-3.5 h-3.5 text-emerald-500" />
+                        </div>
+                        <div>
+                          <span className="font-[650] text-[11px] uppercase tracking-wider opacity-60">PICKUP FROM</span>
+                          <div className="text-[13px]">{d.pickup_address}</div>
+                          <div className="text-[11.5px] opacity-70">Donor: {d.donor_name}</div>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2 text-[13px]">
+                        <div className="w-6 h-6 rounded-full bg-orange-500/15 flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <MapPin className="w-3.5 h-3.5 text-orange-500" />
+                        </div>
+                        <div>
+                          <span className="font-[650] text-[11px] uppercase tracking-wider opacity-60">DELIVER TO</span>
+                          <div className="text-[13px]">{ngoName}</div>
+                          <div className="text-[11.5px] opacity-70">{dist} km away</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px]">
+                      <span className={`px-2 py-[3px] rounded-full ${dark?'bg-amber-400/10 text-amber-300':'bg-amber-100 text-amber-700'}`}>
+                        <Clock className="w-3 h-3 inline mr-1" />
+                        Expires {new Date(d.expiry_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                      <span className="opacity-60">{d.servings} servings</span>
+                      <span className="opacity-60">{d.quantity_kg} kg</span>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      <button
+                        onClick={() => handleClaimAssignment(d.id)}
+                        className="px-5 py-[10px] rounded-[14px] bg-gradient-to-r from-emerald-600 to-emerald-500 text-white text-[13px] font-[660] shadow-md shadow-emerald-600/20 hover:brightness-105 transition flex items-center gap-1.5"
+                      >
+                        <Navigation2 className="w-4 h-4" />
+                        Claim Pickup
+                      </button>
+                      <button
+                        onClick={() => {
+                          setActivePickupAlert(d)
+                        }}
+                        className={`px-4 py-[10px] rounded-[14px] text-[13px] font-[620] ${glass(dark)}`}
+                      >
+                        View Details
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="w-full md:w-[130px] flex flex-col items-center">
+                    <div className={`p-[6px] rounded-[12px] ${dark ? 'bg-white/[0.08]' : 'bg-white'} shadow-sm`}>
+                      <QRCodeCanvas value={`foodlink://pickup/${d.id}`} size={110} />
+                    </div>
+                    <div className="text-[10px] opacity-70 mt-2 text-center">Claim to activate QR</div>
+                  </div>
+                </div>
+              </GlassCard>
+            )
+          })}
+        </>
+      )}
+
+      {/* My Active Assignments Section */}
+      {claimedPickups.length > 0 && (
+        <>
+          <div className="flex items-center gap-2 mt-6">
+            <Truck className="w-4 h-4 text-emerald-500" />
+            <span className="text-[14px] font-[700]">My Active Assignments</span>
+            <span className={`text-[12px] px-2.5 py-[3px] rounded-full ${dark?'bg-blue-400/10 text-blue-300':'bg-blue-100 text-blue-700'}`}>
+              {claimedPickups.length} active
+            </span>
+          </div>
+
+          {claimedPickups.map(d => {
+            const ngo = users.find(u => u.id === d.accepted_by)
+            const ngoName = ngo?.organization_name || ngo?.full_name || 'NGO'
+
+            return (
+              <GlassCard key={d.id} dark={dark} className="p-[18px]">
+                <div className="flex flex-col md:flex-row gap-4">
+                  <img src={d.images?.[0] || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=600&auto=format&fit=crop'} className="w-full md:w-[180px] h-[128px] object-cover rounded-[16px]" alt="" />
+                  <div className="flex-1">
+                    <div className="text-[17px] font-[720]">{d.food_name}</div>
+
+                    {/* FROM → TO for claimed */}
+                    <div className="mt-2 space-y-1">
+                      <div className="flex items-center gap-2 text-[12.5px]">
+                        <div className="w-5 h-5 rounded-full bg-emerald-500/15 flex items-center justify-center">
+                          <MapPin className="w-3 h-3 text-emerald-500" />
+                        </div>
+                        <span className="opacity-80">From: {d.pickup_address}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-[12.5px]">
+                        <div className="w-5 h-5 rounded-full bg-orange-500/15 flex items-center justify-center">
+                          <MapPin className="w-3 h-3 text-orange-500" />
+                        </div>
+                        <span className="opacity-80">To: {ngoName}</span>
+                      </div>
+                    </div>
+
+                    <div className={`mt-2 inline-flex items-center gap-1.5 ${statusTint(d.status, dark)} text-[11px] px-2.5 py-[4px] rounded-full`}>
+                      {d.status === 'volunteer_assigned' && <ScanLine className="w-3.5 h-3.5" />}
+                      {d.status === 'picked_up' && <Truck className="w-3.5 h-3.5" />}
+                      {d.status === 'delivered' && <CheckCircle2 className="w-3.5 h-3.5" />}
+                      {d.status.replace('_', ' ')}
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      {d.status === 'volunteer_assigned' && (
+                        <button onClick={() => handleUpdateStatus(d.id, 'picked_up')} className="px-3 py-[9px] rounded-[12px] bg-emerald-600 text-white text-[13px] font-[640] flex items-center gap-1.5"><ScanLine className="w-4 h-4" /> QR Pickup</button>
+                      )}
+                      {d.status === 'picked_up' && (
+                        <button onClick={() => handleUpdateStatus(d.id, 'delivered')} className={`px-3 py-[9px] rounded-[12px] text-[13px] ${glass(dark)} flex items-center gap-1.5`}><Camera className="w-4 h-4" /> Upload Proof</button>
+                      )}
+                      {d.status === 'delivered' && (
+                        <button onClick={() => handleUpdateStatus(d.id, 'completed', 18)} className={`px-3 py-[9px] rounded-[12px] text-[13px] ${glass(dark)}`}>Mark Completed</button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="w-full md:w-[170px] flex flex-col items-center">
+                    <div className={`p-[10px] rounded-[16px] ${dark ? 'bg-white' : 'bg-white'} shadow-sm`}>
+                      <QRCodeCanvas value={`foodlink://pickup/${d.id}`} size={124} />
+                    </div>
+                    <div className="text-[11px] opacity-70 mt-2">Scan to verify pickup</div>
+                  </div>
+                </div>
+              </GlassCard>
+            )
+          })}
+        </>
+      )}
+
+      {/* Empty state */}
+      {availablePickups.length === 0 && claimedPickups.length === 0 && (
+        <GlassCard dark={dark} className="p-16 text-center">
+          <Truck className="w-14 h-14 mx-auto mb-4 opacity-30" />
+          <div className="text-[18px] font-[700]">No assignments yet</div>
+          <div className={`text-[14px] mt-2 ${dark?'text-zinc-400':'text-zinc-500'}`}>
+            When an NGO accepts a donation, you'll see it here with full pickup & delivery details.
+          </div>
+        </GlassCard>
+      )}
     </div>
   )
 }
 
 // ADMIN
 function AdminViews({ active, dark }:{ active:string, dark:boolean }) {
-  const { users, donations, emergencies } = useStore()
+  const { users, donations, emergencies, currentUser } = useStore()
+  const allUsers = users.length > 0 ? users : currentUser ? [currentUser] : []
+  const [roleFilter, setRoleFilter] = useState<'all'|Role>('all')
+  const [searchTerm, setSearchTerm] = useState('')
+
+  const filteredUsers = allUsers.filter(u => {
+    const matchesRole = roleFilter === 'all' || u.role === roleFilter
+    const term = searchTerm.toLowerCase()
+    const matchesSearch = !term
+      || (u.full_name || '').toLowerCase().includes(term)
+      || (u.email || '').toLowerCase().includes(term)
+      || (u.organization_name || '').toLowerCase().includes(term)
+    return matchesRole && matchesSearch
+  })
+
+  const roleColors: Record<string, {bg:string, text:string, label:string}> = {
+    donor: { bg: 'bg-emerald-500/15', text: 'text-emerald-700 dark:text-emerald-300', label: 'Donor' },
+    ngo: { bg: 'bg-blue-500/15', text: 'text-blue-700 dark:text-blue-300', label: 'NGO' },
+    volunteer: { bg: 'bg-purple-500/15', text: 'text-purple-700 dark:text-purple-300', label: 'Volunteer' },
+    admin: { bg: 'bg-amber-500/15', text: 'text-amber-700 dark:text-amber-300', label: 'Admin' },
+  }
+
+  const counts = {
+    total: allUsers.length,
+    donor: allUsers.filter(u=>u.role==='donor').length,
+    ngo: allUsers.filter(u=>u.role==='ngo').length,
+    volunteer: allUsers.filter(u=>u.role==='volunteer').length,
+    admin: allUsers.filter(u=>u.role==='admin').length,
+  }
+
   if(active==='users') {
     return (
-      <GlassCard dark={dark} className="p-[20px] overflow-auto">
-        <table className="w-full text-[13.5px]">
-          <thead className="opacity-70 text-[11.5px] uppercase tracking-wider"><tr><th className="text-left py-2">User</th><th>Role</th><th>Points</th><th>Rank</th><th>Verified</th><th></th></tr></thead>
-          <tbody>
-            {users.map(u=>(
-              <tr key={u.id} className="border-t border-black/[0.07] dark:border-white/[0.07]">
-                <td className="py-[13px]">{u.full_name}<div className="text-[11.5px] opacity-70">{u.email}</div></td>
-                <td className="capitalize">{u.role}</td>
-                <td>{u.points}</td>
-                <td>{u.rank}</td>
-                <td>{u.verified ? '✅' : '—'}</td>
-                <td><button className="text-[12px] text-emerald-600" onClick={()=>toast('User updated')}>Manage</button></td>
-              </tr>
+      <div className="space-y-5">
+        {/* Summary stat cards */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          {[
+            {key:'total', label:'Total Users', count: counts.total, icon: Users2, color: 'from-emerald-500 to-emerald-600'},
+            {key:'donor', label:'Donors', count: counts.donor, icon: HeartHandshake, color: 'from-emerald-400 to-emerald-500'},
+            {key:'ngo', label:'NGOs', count: counts.ngo, icon: Sprout, color: 'from-blue-400 to-blue-500'},
+            {key:'volunteer', label:'Volunteers', count: counts.volunteer, icon: Truck, color: 'from-purple-400 to-purple-500'},
+            {key:'admin', label:'Admins', count: counts.admin, icon: ShieldCheck, color: 'from-amber-400 to-amber-500'},
+          ].map(c=>(
+            <GlassCard key={c.key} dark={dark} className="p-[14px] flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-[14px] flex items-center justify-center bg-gradient-to-br ${c.color} text-white shadow-sm`}>
+                <c.icon className="w-[18px] h-[18px]" />
+              </div>
+              <div>
+                <div className="text-[11px] uppercase tracking-wider opacity-70 font-[650]">{c.label}</div>
+                <div className="display text-[24px] font-[700] leading-tight">{c.count}</div>
+              </div>
+            </GlassCard>
+          ))}
+        </div>
+
+        {/* Role filter tabs + search */}
+        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+          <div className="flex flex-wrap gap-1.5">
+            {(['all','donor','ngo','volunteer','admin'] as const).map(r => (
+              <button key={r} onClick={()=>setRoleFilter(r)}
+                className={`px-3.5 py-[7px] rounded-[14px] text-[12.5px] font-[640] capitalize transition ${
+                  roleFilter === r
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : `${glass(dark)} ${dark ? 'hover:bg-white/[0.07]' : 'hover:bg-white'}`
+                }`}>
+                {r === 'all' ? 'All Users' : r + 's'}
+              </button>
             ))}
-          </tbody>
-        </table>
-      </GlassCard>
+          </div>
+          <div className={`flex items-center gap-2 ${glass(dark)} rounded-[16px] px-3 h-[42px] w-full sm:w-[280px]`}>
+            <Search className="w-[16px] h-[16px] opacity-60" />
+            <input
+              value={searchTerm}
+              onChange={e=>setSearchTerm(e.target.value)}
+              placeholder="Search by name, email, org..."
+              className="bg-transparent outline-none w-full text-[13px]"
+            />
+            {searchTerm && (
+              <button onClick={()=>setSearchTerm('')} className="text-[11px] opacity-60 hover:opacity-100">✕</button>
+            )}
+          </div>
+        </div>
+
+        {/* Users cards grid */}
+        <GlassCard dark={dark} className="p-[16px] overflow-auto">
+          {filteredUsers.length === 0 ? (
+            <div className="py-16 text-center">
+              <div className="text-[32px] opacity-40 mb-2"><Users2 className="w-10 h-10 mx-auto" /></div>
+              <div className="text-[14px] opacity-70">
+                {searchTerm
+                  ? `No users matching "${searchTerm}"`
+                  : 'No users available. Please check your Supabase profiles table or admin permissions.'}
+              </div>
+            </div>
+          ) : (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {filteredUsers.map(u => {
+                const av = getAvatarStyle(u.email, u.full_name)
+                const rc = roleColors[u.role] || roleColors.donor
+                return (
+                  <div key={u.id} className={`p-[14px] rounded-[20px] ${dark ? 'bg-white/[0.04]' : 'bg-black/[0.025]'} border ${dark ? 'border-white/[0.06]' : 'border-black/[0.05]'}`}>
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-[44px] h-[44px] rounded-[14px] flex items-center justify-center text-white text-[16px] font-[700] bg-gradient-to-br ${av.gradient} shadow-md`}>
+                          {av.initials}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-[14.5px] font-[680] truncate">{u.full_name}</div>
+                          <div className="text-[11.5px] opacity-70 truncate">{u.email}</div>
+                        </div>
+                      </div>
+                      <span className={`text-[10px] px-[9px] py-[4px] rounded-full font-[650] capitalize ${rc.bg} ${rc.text}`}>
+                        {rc.label}
+                      </span>
+                    </div>
+
+                    {u.organization_name && (
+                      <div className={`text-[12.3px] mb-2 flex items-center gap-1.5 opacity-80`}>
+                        <Sprout className="w-3.5 h-3.5" />
+                        {u.organization_name}
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-3 text-[12px] opacity-80 mb-2">
+                      <div className="flex items-center gap-1">
+                        <Trophy className="w-3.5 h-3.5 text-amber-500" />
+                        <span>{u.points} pts</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Star className="w-3.5 h-3.5 text-emerald-500" />
+                        <span>{u.rank}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {u.verified ? (
+                          <BadgeCheck className="w-3.5 h-3.5 text-emerald-500" />
+                        ) : (
+                          <span className="text-[10px] px-1.5 py-[2px] rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300">Unverified</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Rank progress bar */}
+                    {u.points > 0 && (
+                      <div className={`mt-2 h-[6px] rounded-full ${dark?'bg-white/[0.07]':'bg-black/[0.06]'} overflow-hidden`}>
+                        <div className={`h-full rounded-full bg-gradient-to-r ${rankColor[u.rank] || 'from-amber-600 to-orange-500'}`}
+                          style={{width: `${Math.min(100, ((u.points || 0) % 300) / 3)}%`}} />
+                      </div>
+                    )}
+
+                    <div className="flex gap-2 mt-3 pt-2 border-t border-black/[0.06] dark:border-white/[0.06]">
+                      <button onClick={()=>toast(`Viewing profile for ${u.full_name}`)}
+                        className="flex-1 text-[11.5px] py-[7px] rounded-[11px] bg-emerald-600 text-white font-[600]">
+                        View Profile
+                      </button>
+                      <button onClick={()=>toast(`Messaging ${u.full_name}`)}
+                        className={`flex-1 text-[11.5px] py-[7px] rounded-[11px] ${glass(dark)} font-[600]`}>
+                        Message
+                      </button>
+                      {u.role !== 'admin' && (
+                        <button onClick={()=>toast(`Suspend ${u.full_name} (demo)`)}
+                          className={`text-[11.5px] px-3 py-[7px] rounded-[11px] ${dark?'bg-red-400/10 text-red-300':'bg-red-50 text-red-700'} font-[600]`}>
+                          Suspend
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </GlassCard>
+      </div>
     )
   }
   if(active==='heatmap') return <GlassCard dark={dark} className="p-3 h-[560px]"><MapWithDonations dark={dark} donations={donations} heat/></GlassCard>
@@ -1465,10 +2088,11 @@ function ChatPanel({ dark }:{ dark:boolean }) {
   const { messages, currentUser } = useStore()
   const [text, setText] = useState('')
   const endRef = useRef<HTMLDivElement>(null)
+  const sortedMessages = React.useMemo(() => [...messages].sort((a,b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()), [messages])
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages.length])
+  }, [sortedMessages.length])
 
   const handleSendMessage = async () => {
     if (!text.trim() || !currentUser) return
@@ -1502,18 +2126,24 @@ function ChatPanel({ dark }:{ dark:boolean }) {
   return (
     <GlassCard dark={dark} className="p-[18px] md:p-[22px]">
       <div className="text-[15px] font-[720] mb-3 flex items-center gap-2"><MessageCircle className="w-[18px] h-[18px]" /> Live Chat</div>
+      <div className="text-[12px] mb-3 opacity-70">{sortedMessages.length} message{sortedMessages.length === 1 ? '' : 's'} · {currentUser ? 'logged in' : 'log in to participate'}</div>
       <div className="h-[420px] overflow-auto pr-2 space-y-[10px] rounded-[16px]">
-        {messages.map(m => (
+        {sortedMessages.length === 0 ? (
+          <div className="p-6 text-center text-[14px] opacity-70">No chat messages yet. Send the first message to start the conversation.</div>
+        ) : sortedMessages.map(m => (
           <div key={m.id} className={`max-w-[76%] px-[14px] py-[11px] rounded-[18px] text-[13.8px] ${m.sender_id === currentUser?.id ? 'ml-auto bg-emerald-600 text-white rounded-br-[7px]' : dark ? 'bg-white/[0.07] rounded-bl-[7px]' : 'bg-black/[0.055] rounded-bl-[7px]'}`}>
-            <div className="text-[11px] opacity-80 mb-[2px] font-bold">{m.sender_id === currentUser?.id ? 'You' : 'Member'}</div>
+            <div className="flex items-center justify-between gap-2 text-[11px] opacity-80 mb-[2px] font-bold">
+              <span>{m.sender_id === currentUser?.id ? 'You' : m.sender_name || 'Member'}</span>
+              <span className="text-[10px] opacity-60">{new Date(m.created_at).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })}</span>
+            </div>
             {m.text}
           </div>
         ))}
         <div ref={endRef} />
       </div>
       <form onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }} className="flex gap-2 mt-3">
-        <input value={text} onChange={e => setText(e.target.value)} placeholder="Type a message..." className={inputCls(dark)} />
-        <button type="submit" className="px-[16px] rounded-[14px] bg-emerald-600 text-white flex items-center gap-1.5"><Send className="w-4 h-4" /> Send</button>
+        <input value={text} onChange={e => setText(e.target.value)} placeholder={currentUser ? 'Type a message...' : 'Login to join the chat'} className={inputCls(dark)} disabled={!currentUser} />
+        <button type="submit" disabled={!currentUser || !text.trim()} className="px-[16px] rounded-[14px] bg-emerald-600 text-white flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"><Send className="w-4 h-4" /> Send</button>
       </form>
     </GlassCard>
   )
@@ -1521,35 +2151,69 @@ function ChatPanel({ dark }:{ dark:boolean }) {
 
 // Leaderboard
 function Leaderboard({ dark }:{ dark:boolean }) {
-  const { users } = useStore()
-  const sorted = [...users].sort((a,b)=> b.points - a.points)
+  const { users, currentUser } = useStore()
+  const sorted = [...users].sort((a,b)=> (b.points || 0) - (a.points || 0))
+  const currentRank = currentUser ? sorted.findIndex(u => u.id === currentUser.id) + 1 : null
   return (
-    <div className="grid lg:grid-cols-3 gap-5">
-      {['donor','ngo','volunteer'].map(role=>(
-        <GlassCard key={role} dark={dark} className="p-[18px]">
-          <div className="text-[13.5px] font-[720] uppercase tracking-wider opacity-80 mb-3">Top {role}s</div>
-          <div className="space-y-[10px]">
-            {sorted.filter(u=>u.role===role).slice(0,5).map((u,i)=>(
-              <div key={u.id} className={`flex items-center gap-3 p-[11px] rounded-[14px] ${dark?'bg-white/[0.035]':'bg-black/[0.03]'}`}>
-                <div className="text-[11.5px] font-[800] opacity-70">#{i+1}</div>
-                {(() => {
-                  const av = getAvatarStyle(u.email, u.full_name)
-                  return (
-                    <div className={`w-10 h-10 rounded-[12px] flex items-center justify-center text-white text-[12px] font-[700] bg-gradient-to-br ${av.gradient} shadow-md`}>
-                      {av.initials}
-                    </div>
-                  )
-                })()}
-                <div className="flex-1 min-w-0">
-                  <div className="text-[13.7px] font-[660] truncate">{u.full_name}</div>
-                  <div className="text-[11.5px] opacity-75">{u.rank} • {u.points} pts</div>
-                </div>
-                <Trophy className="w-4 h-4 text-amber-500"/>
-              </div>
-            ))}
+    <div className="space-y-5">
+      <GlassCard dark={dark} className="p-[18px]">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <div className="text-[13.5px] font-[720] uppercase tracking-wider opacity-80">Leaderboard</div>
+            <div className="text-[12px] opacity-70">Top contributors across donors, NGOs, and volunteers.</div>
           </div>
-        </GlassCard>
-      ))}
+          {currentUser && currentRank ? (
+            <div className="text-[12px] opacity-80 text-right">
+              Your rank: <span className="font-[700]">#{currentRank}</span><br />
+              {currentUser.points} pts · {currentUser.rank}
+            </div>
+          ) : null}
+        </div>
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {sorted.slice(0,5).map((u,i)=>(
+            <div key={u.id} className={`p-[14px] rounded-[18px] ${dark?'bg-white/[0.04]':'bg-black/[0.035]'}`}>
+              <div className="flex items-center gap-3 mb-3">
+                <div className="text-[11.5px] font-[800] opacity-70">#{i+1}</div>
+                <div className={`w-9 h-9 rounded-[12px] flex items-center justify-center text-white text-[12px] font-[700] bg-gradient-to-br ${getAvatarStyle(u.email, u.full_name).gradient}`}>
+                  {getAvatarStyle(u.email, u.full_name).initials}
+                </div>
+                <div className="min-w-0">
+                  <div className="text-[13.3px] font-[660] truncate">{u.full_name}</div>
+                  <div className="text-[11px] opacity-75">{u.role.toUpperCase()}</div>
+                </div>
+              </div>
+              <div className="text-[12px] opacity-80">{u.points} pts · {u.rank}</div>
+            </div>
+          ))}
+        </div>
+      </GlassCard>
+      <div className="grid lg:grid-cols-3 gap-5">
+        {['donor','ngo','volunteer'].map(role=>{
+          const roleUsers = sorted.filter(u=>u.role===role).slice(0,5)
+          return (
+            <GlassCard key={role} dark={dark} className="p-[18px]">
+              <div className="text-[13.5px] font-[720] uppercase tracking-wider opacity-80 mb-3">Top {role}s</div>
+              <div className="space-y-[10px]">
+                {roleUsers.length === 0 ? (
+                  <div className="text-[13px] opacity-70">No {role} users tracked yet.</div>
+                ) : roleUsers.map((u,i)=>(
+                  <div key={u.id} className={`flex items-center gap-3 p-[11px] rounded-[14px] ${dark?'bg-white/[0.035]':'bg-black/[0.03]'}`}>
+                    <div className="text-[11.5px] font-[800] opacity-70">#{i+1}</div>
+                    <div className={`w-10 h-10 rounded-[12px] flex items-center justify-center text-white text-[12px] font-[700] bg-gradient-to-br ${getAvatarStyle(u.email, u.full_name).gradient}`}>
+                      {getAvatarStyle(u.email, u.full_name).initials}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[13.7px] font-[660] truncate">{u.full_name}</div>
+                      <div className="text-[11.5px] opacity-75">{u.rank} • {u.points} pts</div>
+                    </div>
+                    <Trophy className="w-4 h-4 text-amber-500"/>
+                  </div>
+                ))}
+              </div>
+            </GlassCard>
+          )
+        })}
+      </div>
     </div>
   )
 }

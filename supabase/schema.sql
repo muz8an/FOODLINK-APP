@@ -37,6 +37,11 @@ create index if not exists idx_profiles_points    on public.profiles(points desc
 create index if not exists idx_profiles_verified  on public.profiles(verified);
 create index if not exists idx_profiles_location  on public.profiles(lat, lng);
 
+-- Normalize any existing profile roles to lowercase to match app expectations
+update public.profiles
+set role = lower(role)
+where role is not null and role <> lower(role);
+
 -- ============================================================
 -- 2. DONATIONS TABLE (includes all missing columns)
 -- ============================================================
@@ -323,7 +328,7 @@ begin
     new.id,
     new.email,
     coalesce(new.raw_user_meta_data->>'full_name', 'FoodLink Member'),
-    coalesce(new.raw_user_meta_data->>'role', 'donor'),
+      lower(coalesce(new.raw_user_meta_data->>'role', 'donor')),
     coalesce((new.raw_user_meta_data->>'verified')::boolean, false),
     coalesce((new.raw_user_meta_data->>'points')::integer, 0),
     coalesce(new.raw_user_meta_data->>'rank', 'Bronze'),
