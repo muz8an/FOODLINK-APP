@@ -2,7 +2,7 @@
 // All database operations with proper error handling, fallbacks, and schema validation
 
 import { supabase, isSupabaseConfigured } from './supabase'
-import type { UserProfile, Donation, EmergencyReq, ChatMessage, Notif } from './store'
+import type { Role, UserProfile, Donation, EmergencyReq, ChatMessage, Notif, DeliveryRecord } from './store'
 
 // ============================================================
 // SCHEMA HEALTH CHECK
@@ -312,6 +312,18 @@ export const emergencyDb = {
       throw error
     }
     return data as EmergencyReq
+  },
+
+  async updateFulfilled(id: string, fulfilled: number, status?: string): Promise<boolean> {
+    if (!isSupabaseConfigured()) return false
+    const patch: Record<string, any> = { fulfilled }
+    if (status) patch.status = status
+    const { error } = await supabase.from('emergency_requests').update(patch).eq('id', id)
+    if (error) {
+      console.warn('emergency.updateFulfilled error:', error.message)
+      return false
+    }
+    return true
   }
 }
 
@@ -357,6 +369,12 @@ export const notifsDb = {
     if (!isSupabaseConfigured()) return
     const { error } = await supabase.from('notifications').update({ read: true }).eq('id', id)
     if (error) console.warn('notifs.markRead error:', error.message)
+  },
+
+  async markAllRead(userId: string): Promise<void> {
+    if (!isSupabaseConfigured()) return
+    const { error } = await supabase.from('notifications').update({ read: true }).eq('user_id', userId).eq('read', false)
+    if (error) console.warn('notifs.markAllRead error:', error.message)
   }
 }
 
@@ -488,6 +506,31 @@ export const storage = {
     } catch {
       return dataUrl
     }
+  }
+}
+
+// ============================================================
+// DELIVERIES (audit trail)
+// ============================================================
+export const deliveriesDb = {
+  async record(entry: DeliveryRecord): Promise<boolean> {
+    if (!isSupabaseConfigured()) return false
+    const { error } = await supabase.from('deliveries').insert({
+      donation_id: entry.donation_id,
+      volunteer_id: entry.volunteer_id,
+      qr_code: entry.qr_code || `foodlink://pickup/${entry.donation_id}`,
+      pickup_proof_url: entry.pickup_proof_url || null,
+      delivery_proof_url: entry.delivery_proof_url || null,
+      picked_up_at: entry.picked_up_at || null,
+      delivered_at: entry.delivered_at || null,
+      distance_km: entry.distance_km ?? null,
+    })
+    if (error) {
+      const c = classifyError(error)
+      console.warn(`deliveries.record (${c.kind}):`, c.message)
+      return false
+    }
+    return true
   }
 }
 

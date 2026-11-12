@@ -36,8 +36,8 @@ export interface Donation {
   notes?: string
   images: string[]
   status: DonationStatus
-  accepted_by?: string
-  volunteer_id?: string
+  accepted_by?: string | null
+  volunteer_id?: string | null
   points_awarded: number
   created_at: string
 }
@@ -76,7 +76,17 @@ export interface Notif {
   created_at: string
 }
 
-
+export interface DeliveryRecord {
+  id?: string
+  donation_id: string
+  volunteer_id: string
+  qr_code?: string
+  pickup_proof_url?: string
+  delivery_proof_url?: string
+  picked_up_at?: string
+  delivered_at?: string
+  distance_km?: number
+}
 
 interface State {
   users: UserProfile[]
@@ -88,9 +98,11 @@ interface State {
   pickupAlerts: string[] // donation IDs that have been accepted and need volunteer claim
   setCurrentUser: (u:UserProfile|null)=>void
   addUser: (u:UserProfile)=>void
+  upsertUser: (u:UserProfile)=>void
   addDonation: (d:Donation)=>void
   updateDonation: (id:string, patch:Partial<Donation>)=>void
   addEmergency: (e:EmergencyReq)=>void
+  updateEmergency: (id:string, patch:Partial<EmergencyReq>)=>void
   addMessage: (m:ChatMessage)=>void
   pushNotif: (n:Notif)=>void
   markNotifRead: (id:string)=>void
@@ -109,14 +121,37 @@ export const useStore = create<State>((set, _get)=>({
   notifications: [],
   pickupAlerts: [],
   setCurrentUser: (u)=> set({currentUser: u}),
-  addUser: (u)=> set(s=> ({users: [...s.users, u]})),
-  addDonation: (d)=> set(s=> ({donations: [d, ...s.donations]})),
+  addUser: (u)=> set(s=> ({
+    users: s.users.some(x => x.id === u.id)
+      ? s.users.map(x => x.id === u.id ? { ...x, ...u } : x)
+      : [...s.users, u]
+  })),
+  upsertUser: (u)=> set(s=> ({
+    users: s.users.some(x => x.id === u.id)
+      ? s.users.map(x => x.id === u.id ? { ...x, ...u } : x)
+      : [...s.users, u],
+    currentUser: s.currentUser?.id === u.id ? { ...s.currentUser, ...u } : s.currentUser
+  })),
+  addDonation: (d)=> set(s=> ({
+    donations: s.donations.some(x => x.id === d.id)
+      ? s.donations.map(x => x.id === d.id ? { ...x, ...d } : x)
+      : [d, ...s.donations]
+  })),
   updateDonation: (id,patch)=> set(s=> ({donations: s.donations.map(x=>x.id===id? {...x, ...patch}:x)})),
-  addEmergency: (e)=> set(s=> ({emergencies: [e, ...s.emergencies]})),
+  addEmergency: (e)=> set(s=> ({
+    emergencies: s.emergencies.some(x => x.id === e.id)
+      ? s.emergencies.map(x => x.id === e.id ? { ...x, ...e } : x)
+      : [e, ...s.emergencies]
+  })),
+  updateEmergency: (id, patch)=> set(s=> ({
+    emergencies: s.emergencies.map(x => x.id === id ? { ...x, ...patch } : x)
+  })),
   addMessage: (m)=> set(s=> ({
     messages: s.messages.some(x => x.id === m.id) ? s.messages : [...s.messages, m]
   })),
-  pushNotif: (n)=> set(s=> ({ notifications: [n, ...s.notifications] })),
+  pushNotif: (n)=> set(s=> ({
+    notifications: s.notifications.some(x => x.id === n.id) ? s.notifications : [n, ...s.notifications]
+  })),
   markNotifRead: (id)=> set(s=> ({notifications: s.notifications.map(n=>n.id===id? {...n, read:true}:n)})),
   awardPoints: (userId, pts)=> set(s=>{
     const users = s.users.map(u=> u.id===userId ? {...u, points:u.points+pts, rank: calcRank(u.points+pts)}:u)
